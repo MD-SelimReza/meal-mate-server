@@ -2,7 +2,8 @@ const express = require('express');
 const app = express();
 require('dotenv').config();
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const jwt = require('jsonwebtoken');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const port = process.env.PORT || 9000;
 
@@ -14,8 +15,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express());
-
-
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.4ldhpeq.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -29,13 +28,44 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        // Connect the client to the server	(optional starting in v4.7)
-        // await client.connect();
         // Collection
-        const infoCollection = client.db('hostelDB').collection('info');
+        const mealCollection = client.db('hostelDB').collection('meals');
 
-        app.get('/info', async (req, res) => {
-            const result = await infoCollection.find().toArray();
+
+        // jwt api
+        app.post('/jwt', async (req, res) => {
+            const user = req.body;
+            console.log(user);
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1d' });
+            console.log(token);
+            res.send({ token: token });
+        })
+
+        app.get('/meals', async (req, res) => {
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 10;
+            const skip = (page - 1) * limit;
+
+            try {
+                const meals = await mealCollection.find().skip(skip).limit(limit).toArray();
+                const totalMeals = await mealCollection.countDocuments();
+
+                res.send({
+                    meals,
+                    totalMeals,
+                    currentPage: page,
+                    totalPages: Math.ceil(totalMeals / limit),
+                    nextPage: page * limit < totalMeals ? page + 1 : null
+                });
+            } catch (error) {
+                res.status(500).send({ error: 'Failed to fetch meals...' });
+            }
+        });
+
+        app.get('/meal/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await mealCollection.findOne(query);
             res.send(result);
         })
 
