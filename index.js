@@ -4,6 +4,7 @@ require('dotenv').config();
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 
 const port = process.env.PORT || 9000;
 
@@ -14,7 +15,7 @@ const corsOptions = {
 }
 
 app.use(cors(corsOptions));
-app.use(express());
+app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.4ldhpeq.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -30,17 +31,44 @@ async function run() {
     try {
         // Collection
         const mealCollection = client.db('hostelDB').collection('meals');
+        const packageCollection = client.db('hostelDB').collection('packages');
+        const paymentCollection = client.db('hostelDB').collection('payments');
 
 
         // jwt api
         app.post('/jwt', async (req, res) => {
             const user = req.body;
-            console.log(user);
+            console.log('User--->', user);
             const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1d' });
-            console.log(token);
+            console.log('Token--->', token);
             res.send({ token: token });
         })
 
+        // payment api
+        app.post('/create-payment-intent', async (req, res) => {
+            const { price } = req.body;
+            console.log('Price--->', price);
+            const amount = parseInt(price * 100);
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: 'usd',
+                payment_method_types: ['card']
+            })
+            res.send({
+                clientSecret: paymentIntent.client_secret
+            })
+        })
+
+        app.post('/payments', async (req, res) => {
+            const payment = req.body;
+            const paymentResult = await paymentCollection.insertOne(payment);
+            console.log('payment info', payment);
+
+            res.send({ paymentResult });
+        })
+
+        // meals api
         app.get('/meals', async (req, res) => {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
@@ -66,6 +94,19 @@ async function run() {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const result = await mealCollection.findOne(query);
+            res.send(result);
+        })
+
+        // package api 
+        app.get('/packages', async (req, res) => {
+            const result = await packageCollection.find().toArray();
+            res.send(result);
+        })
+
+        app.get('/checkout/:package_name', async (req, res) => {
+            const package = req.params.package_name;
+            const query = { package_name: package };
+            const result = await packageCollection.findOne(query);
             res.send(result);
         })
 
