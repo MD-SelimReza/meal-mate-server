@@ -32,8 +32,36 @@ async function run() {
         // Collection
         const mealCollection = client.db('hostelDB').collection('meals');
         const packageCollection = client.db('hostelDB').collection('packages');
+        const userCollection = client.db('hostelDB').collection('users');
         const paymentCollection = client.db('hostelDB').collection('payments');
 
+
+        // middlewares
+        const verifyToken = (req, res, next) => {
+            console.log('inside verify token', req.headers.authorization);
+            if (!req.headers.authorization) {
+                return res.status(401).send({ message: 'unauthorized access1' });
+            }
+            const token = req.headers.authorization.split(' ')[1];
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+                if (err) {
+                    return res.status(401).send({ message: 'unauthorized access2' });
+                }
+                req.decoded = decoded;
+                next();
+            })
+        }
+
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            const isAdmin = user?.badge === 'admin';
+            if (!isAdmin) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        }
 
         // jwt api
         app.post('/jwt', async (req, res) => {
@@ -95,6 +123,43 @@ async function run() {
             const query = { _id: new ObjectId(id) };
             const result = await mealCollection.findOne(query);
             res.send(result);
+        })
+
+        // users api
+        app.post('/user', async (req, res) => {
+            const user = req.body;
+            console.log('user-->', user);
+            const query = { email: user?.email };
+            console.log('user email-->', query);
+            const existingUser = await userCollection.findOne(query);
+            if (existingUser) {
+                return res.send(existingUser);
+            }
+            const result = await userCollection.insertOne(user);
+            res.send(result);
+        })
+
+        app.get('/user/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const result = await userCollection.findOne(query);
+            res.send(result);
+        })
+
+        app.get('/users/admin/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            console.log(email, req.decoded.email);
+            if (!email === req.decoded.email) {
+                return res.status(403).send({ message: 'unauthorized access3' });
+            }
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            console.log('has user-->', user);
+            let admin = false;
+            if (user) {
+                admin = user?.badge === 'Admin';
+            }
+            res.send({ admin });
         })
 
         // package api 
