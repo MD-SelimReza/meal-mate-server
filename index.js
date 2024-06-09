@@ -30,16 +30,10 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Collection
-        const mealCollection = client.db('hostelDB').collection('meals');
-        const mealsCollection = client.db('hostelDB').collection('mealsdata');
+        const mealCollection = client.db('hostelDB').collection('mealsdata');
         const packageCollection = client.db('hostelDB').collection('packages');
         const userCollection = client.db('hostelDB').collection('users');
         const paymentCollection = client.db('hostelDB').collection('payments');
-
-        app.get('/all-meals', async (req, res) => {
-            const result = await mealsCollection.find().toArray();
-            res.send(result)
-        })
 
         // middlewares
         // token verify
@@ -82,7 +76,6 @@ async function run() {
         // payment api
         app.post('/create-payment-intent', async (req, res) => {
             const { price } = req.body;
-            console.log('Price--->', price);
             const amount = parseInt(price * 100);
 
             const paymentIntent = await stripe.paymentIntents.create({
@@ -98,9 +91,13 @@ async function run() {
         app.post('/payments', async (req, res) => {
             const payment = req.body;
             const paymentResult = await paymentCollection.insertOne(payment);
-            console.log('payment info', payment);
-
             res.send({ paymentResult });
+        })
+
+        app.get('/payments/:email', async (req, res) => {
+            const email = req.params.email;
+            const result = await paymentCollection.find().toArray();
+            res.send(result);
         })
 
         // meals api
@@ -136,10 +133,8 @@ async function run() {
         app.get('/meals/:email/reviews', async (req, res) => {
             const email = req.params.email;
 
-            // Find all meals
             const allMeals = await mealCollection.find({}).toArray();
 
-            // Extract all reviews from all meals
             const allReviews = allMeals.reduce((acc, meal) => {
                 if (Array.isArray(meal.reviews)) {
                     return [...acc, ...meal.reviews];
@@ -202,7 +197,7 @@ async function run() {
             res.send(result);
         })
 
-        // Update a user role
+        // Update a user badge
         app.patch('/user-badge/update/:email', verifyToken, async (req, res) => {
             const email = req.params.email
             const user = req.body
