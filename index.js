@@ -31,12 +31,18 @@ async function run() {
     try {
         // Collection
         const mealCollection = client.db('hostelDB').collection('meals');
+        const mealsCollection = client.db('hostelDB').collection('mealsdata');
         const packageCollection = client.db('hostelDB').collection('packages');
         const userCollection = client.db('hostelDB').collection('users');
         const paymentCollection = client.db('hostelDB').collection('payments');
 
+        app.get('/all-meals', async (req, res) => {
+            const result = await mealsCollection.find().toArray();
+            res.send(result)
+        })
 
         // middlewares
+        // token verify
         const verifyToken = (req, res, next) => {
             console.log('inside verify token', req.headers.authorization);
             if (!req.headers.authorization) {
@@ -52,6 +58,7 @@ async function run() {
             })
         }
 
+        // admin verify
         const verifyAdmin = async (req, res, next) => {
             const email = req.decoded.email;
             const query = { email: email };
@@ -97,17 +104,68 @@ async function run() {
         })
 
         // meals api
-        app.get('/meals', async (req, res) => {
-            const page = parseInt(req.query.page) || 1;
-            const limit = parseInt(req.query.limit) || 10;
-            const skip = (page - 1) * limit;
+        // infinite scroller api
+        app.post('/meals', async (req, res) => {
+            const mealData = req.body;
+            const result = await mealCollection.insertOne(mealData);
+            res.send(result);
+        })
+
+        app.post('/meals/:id/reviews', async (req, res) => {
+            const mealId = req.params.id;
+            const newReview = req.body;
 
             try {
-                const meals = await mealCollection.find().skip(skip).limit(limit).toArray();
+                const result = await mealCollection.updateOne(
+                    { _id: new ObjectId(mealId) },
+                    { $push: { reviews: newReview } }
+                );
+
+                if (result.modifiedCount === 0) {
+                    return res.status(404).send({ message: 'Meal not found' });
+                }
+
+                res.send(result)
+
+                res.status(201).send({ message: 'Review added successfully' });
+            } catch (error) {
+                res.status(400).send({ message: error.message });
+            }
+        });
+
+        app.get('/meals/:email/reviews', async (req, res) => {
+            const email = req.params.email;
+
+            // Find all meals
+            const allMeals = await mealCollection.find({}).toArray();
+
+            // Extract all reviews from all meals
+            const allReviews = allMeals.reduce((acc, meal) => {
+                if (Array.isArray(meal.reviews)) {
+                    return [...acc, ...meal.reviews];
+                }
+                return acc;
+            }, []);
+
+            const userReviews = allReviews.filter(review => review?.email === email);
+            console.log(userReviews);
+            res.send(allReviews);
+        });
+
+
+        app.get('/meals', async (req, res) => {
+            const page = parseInt(req.query.page) - 1;
+            const limit = parseInt(req.query.size);
+            const skip = page * limit;
+
+            console.log("inside pagination api--->", page, limit, skip);
+
+            try {
+                const items = await mealCollection.find().skip(skip).limit(limit).toArray();
                 const totalMeals = await mealCollection.countDocuments();
 
                 res.send({
-                    meals,
+                    items,
                     totalMeals,
                     currentPage: page,
                     totalPages: Math.ceil(totalMeals / limit),
@@ -137,6 +195,23 @@ async function run() {
             }
             const result = await userCollection.insertOne(user);
             res.send(result);
+        })
+
+        app.get('/users', async (req, res) => {
+            const result = await userCollection.find().toArray();
+            res.send(result);
+        })
+
+        // Update a user role
+        app.patch('/user-badge/update/:email', verifyToken, async (req, res) => {
+            const email = req.params.email
+            const user = req.body
+            const query = { email }
+            const updateDoc = {
+                $set: { ...user },
+            }
+            const result = await userCollection.updateOne(query, updateDoc)
+            res.send(result)
         })
 
         app.get('/user/:email', async (req, res) => {
