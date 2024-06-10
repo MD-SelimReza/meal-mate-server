@@ -111,23 +111,13 @@ async function run() {
         app.post('/meals/:id/reviews', async (req, res) => {
             const mealId = req.params.id;
             const newReview = req.body;
+            const query = { _id: new ObjectId(mealId) };
+            const updateDoc = {
+                $push: { reviews: newReview }
+            };
 
-            try {
-                const result = await mealCollection.updateOne(
-                    { _id: new ObjectId(mealId) },
-                    { $push: { reviews: newReview } }
-                );
-
-                if (result.modifiedCount === 0) {
-                    return res.status(404).send({ message: 'Meal not found' });
-                }
-
-                res.send(result)
-
-                res.status(201).send({ message: 'Review added successfully' });
-            } catch (error) {
-                res.status(400).send({ message: error.message });
-            }
+            const result = await mealCollection.updateOne(query, updateDoc);
+            res.send(result);
         });
 
         app.get('/meals/:email/reviews', async (req, res) => {
@@ -143,8 +133,7 @@ async function run() {
             }, []);
 
             const userReviews = allReviews.filter(review => review?.email === email);
-            console.log(userReviews);
-            res.send(allReviews);
+            res.send(userReviews);
         });
 
 
@@ -152,8 +141,6 @@ async function run() {
             const page = parseInt(req.query.page) - 1;
             const limit = parseInt(req.query.size);
             const skip = page * limit;
-
-            console.log("inside pagination api--->", page, limit, skip);
 
             try {
                 const items = await mealCollection.find().skip(skip).limit(limit).toArray();
@@ -178,12 +165,42 @@ async function run() {
             res.send(result);
         })
 
+        // app.put('/like-meal/:id', async (req, res) => {
+        //     const id = req.params.id;
+        //     const query = { _id: new ObjectId(id) };
+
+        //     const getMeal = await mealCollection.findOne(query);
+
+        //     const likes = getMeal.likes || 0;
+        //     const updateDoc = {
+        //         $set: { likes: likes + 1 }
+        //     };
+        //     const result = await mealCollection.updateOne(query, updateDoc);
+        //     console.log('Update result:', result);
+        // });
+
+        app.put('/like-meal/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+
+            const getMeal = await mealCollection.findOne(query);
+
+            const currentLikes = getMeal.likes || 0;
+            const newLikes = currentLikes + (getMeal.liked ? -1 : 1);
+
+            const updateDoc = {
+                $set: { likes: newLikes, liked: !getMeal.liked }
+            };
+            const result = await mealCollection.updateOne(query, updateDoc);
+            console.log('Update result:', result);
+        });
+
+
+
         // users api
         app.post('/user', async (req, res) => {
             const user = req.body;
-            console.log('user-->', user);
             const query = { email: user?.email };
-            console.log('user email-->', query);
             const existingUser = await userCollection.findOne(query);
             if (existingUser) {
                 return res.send(existingUser);
@@ -224,7 +241,6 @@ async function run() {
             }
             const query = { email: email };
             const user = await userCollection.findOne(query);
-            console.log('has user-->', user);
             let admin = false;
             if (user) {
                 admin = user?.badge === 'Admin';
