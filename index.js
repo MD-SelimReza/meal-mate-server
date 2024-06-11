@@ -31,6 +31,7 @@ async function run() {
     try {
         // Collection
         const mealCollection = client.db('hostelDB').collection('mealsdata');
+        const requestedMealCollection = client.db('hostelDB').collection('requestMeals');
         const packageCollection = client.db('hostelDB').collection('packages');
         const userCollection = client.db('hostelDB').collection('users');
         const paymentCollection = client.db('hostelDB').collection('payments');
@@ -57,7 +58,8 @@ async function run() {
             const email = req.decoded.email;
             const query = { email: email };
             const user = await userCollection.findOne(query);
-            const isAdmin = user?.badge === 'admin';
+            const isAdmin = user?.role === 'Admin';
+            console.log(user?.role);
             if (!isAdmin) {
                 return res.status(403).send({ message: 'forbidden access' });
             }
@@ -74,7 +76,7 @@ async function run() {
         })
 
         // payment api
-        app.post('/create-payment-intent', async (req, res) => {
+        app.post('/create-payment-intent', verifyToken, async (req, res) => {
             const { price } = req.body;
             const amount = parseInt(price * 100);
 
@@ -88,13 +90,20 @@ async function run() {
             })
         })
 
-        app.post('/payments', async (req, res) => {
+        app.post('/payments', verifyToken, async (req, res) => {
             const payment = req.body;
+            console.log(payment);
+            const query = { email: payment?.email };
+            const isExits = await userCollection.findOne(query);
+            if (isExits) {
+                const result = await userCollection.updateOne(query, { $set: { badge: payment?.badge } })
+                return res.send(result);
+            };
             const paymentResult = await paymentCollection.insertOne(payment);
             res.send({ paymentResult });
         })
 
-        app.get('/payments/:email', async (req, res) => {
+        app.get('/payments/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             const result = await paymentCollection.find().toArray();
             res.send(result);
@@ -102,7 +111,7 @@ async function run() {
 
         // meals api
         // infinite scroller api
-        app.post('/meals', async (req, res) => {
+        app.post('/meals', verifyToken, verifyAdmin, async (req, res) => {
             const mealData = req.body;
             const result = await mealCollection.insertOne(mealData);
             res.send(result);
@@ -165,20 +174,6 @@ async function run() {
             res.send(result);
         })
 
-        // app.put('/like-meal/:id', async (req, res) => {
-        //     const id = req.params.id;
-        //     const query = { _id: new ObjectId(id) };
-
-        //     const getMeal = await mealCollection.findOne(query);
-
-        //     const likes = getMeal.likes || 0;
-        //     const updateDoc = {
-        //         $set: { likes: likes + 1 }
-        //     };
-        //     const result = await mealCollection.updateOne(query, updateDoc);
-        //     console.log('Update result:', result);
-        // });
-
         app.put('/like-meal/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
@@ -194,6 +189,22 @@ async function run() {
             const result = await mealCollection.updateOne(query, updateDoc);
             console.log('Update result:', result);
         });
+
+        // route save request meal in db
+        app.post('/request/meal', async (req, res) => {
+            const requestMeal = req.body;
+            const query = {
+                requestedId: requestMeal?.requestedId
+            };
+            const alreadyRequest = await requestedMealCollection.findOne(query);
+            if (alreadyRequest) {
+                return res.send(`${requestMeal?.title} has already been added to the basket!`);
+            }
+            delete requestMeal._id;
+            const result = await requestedMealCollection.insertOne(requestMeal);
+
+            res.send(result);
+        })
 
 
 
@@ -226,7 +237,7 @@ async function run() {
             res.send(result)
         })
 
-        app.get('/user/:email', async (req, res) => {
+        app.get('/user/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             const query = { email: email };
             const result = await userCollection.findOne(query);
@@ -243,7 +254,7 @@ async function run() {
             const user = await userCollection.findOne(query);
             let admin = false;
             if (user) {
-                admin = user?.badge === 'Admin';
+                admin = user?.role === 'Admin';
             }
             res.send({ admin });
         })
