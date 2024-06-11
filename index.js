@@ -90,7 +90,7 @@ async function run() {
             })
         })
 
-        app.post('/payments', verifyToken, async (req, res) => {
+        app.post('/payments', async (req, res) => {
             const payment = req.body;
             console.log(payment);
             const query = { email: payment?.email };
@@ -145,15 +145,29 @@ async function run() {
             res.send(userReviews);
         });
 
-        app.get('/all-meals', async (req, res) => {
-            const result = await mealCollection.find().toArray();
-            res.send(result);
-        })
 
         app.get('/meals', async (req, res) => {
             const page = parseInt(req.query.page) - 1;
             const limit = parseInt(req.query.size);
             const skip = page * limit;
+
+            try {
+                const items = await mealCollection.find().skip(skip).limit(limit).toArray();
+                const totalMeals = await mealCollection.countDocuments();
+
+                res.send({
+                    items,
+                    totalMeals,
+                    currentPage: page,
+                    totalPages: Math.ceil(totalMeals / limit),
+                    nextPage: page * limit < totalMeals ? page + 1 : null
+                });
+            } catch (error) {
+                res.status(500).send({ error: 'Failed to fetch meals...' });
+            }
+        });
+
+        app.get('/all-meals', async (req, res) => {
             const filter = req.query.filter;
             const sort = req.query.sort;
             const search = req.query.search;
@@ -172,20 +186,9 @@ async function run() {
             // if (sort) {
             //     options.sort = { price: sort === 'asc' ? 1 : -1 };
             // }
-            try {
-                const items = await mealCollection.find(query, options).skip(skip).limit(limit).toArray();
-                const totalMeals = await mealCollection.countDocuments();
+            const result = await mealCollection.find(query, options).toArray();
 
-                res.send({
-                    items,
-                    totalMeals,
-                    currentPage: page,
-                    totalPages: Math.ceil(totalMeals / limit),
-                    nextPage: page * limit < totalMeals ? page + 1 : null
-                });
-            } catch (error) {
-                res.status(500).send({ error: 'Failed to fetch meals...' });
-            }
+            res.send(result,);
         });
 
         app.get('/meal/:id', async (req, res) => {
@@ -224,6 +227,11 @@ async function run() {
             delete requestMeal._id;
             const result = await requestedMealCollection.insertOne(requestMeal);
 
+            res.send(result);
+        })
+
+        app.get('/requestMeals', async (req, res) => {
+            const result = await requestedMealCollection.find().toArray();
             res.send(result);
         })
 
