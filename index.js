@@ -235,6 +235,13 @@ async function run() {
             res.send(result);
         })
 
+        app.delete('/request-meal/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await requestedMealCollection.deleteOne(query);
+            res.send(result);
+        })
+
         // users api
         app.post('/user', async (req, res) => {
             const user = req.body;
