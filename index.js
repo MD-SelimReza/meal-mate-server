@@ -145,14 +145,35 @@ async function run() {
             res.send(userReviews);
         });
 
+        app.get('/all-meals', async (req, res) => {
+            const result = await mealCollection.find().toArray();
+            res.send(result);
+        })
 
         app.get('/meals', async (req, res) => {
             const page = parseInt(req.query.page) - 1;
             const limit = parseInt(req.query.size);
             const skip = page * limit;
+            const filter = req.query.filter;
+            const sort = req.query.sort;
+            const search = req.query.search;
 
+            let query = {
+                $or: [
+                    { category: { $regex: search, $options: 'i' } },
+                    { title: { $regex: search, $options: 'i' } },
+                ]
+            };
+
+            if (filter) query = { ...query, category: filter };
+
+            let options = {};
+            if (sort) options = { sort: { price: sort === 'asc' ? 1 : -1 } };
+            // if (sort) {
+            //     options.sort = { price: sort === 'asc' ? 1 : -1 };
+            // }
             try {
-                const items = await mealCollection.find().skip(skip).limit(limit).toArray();
+                const items = await mealCollection.find(query, options).skip(skip).limit(limit).toArray();
                 const totalMeals = await mealCollection.countDocuments();
 
                 res.send({
@@ -205,8 +226,6 @@ async function run() {
 
             res.send(result);
         })
-
-
 
         // users api
         app.post('/user', async (req, res) => {
