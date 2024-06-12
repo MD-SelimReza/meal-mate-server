@@ -76,7 +76,7 @@ async function run() {
         })
 
         // payment api
-        app.post('/create-payment-intent', verifyToken, async (req, res) => {
+        app.post('/create-payment-intent', async (req, res) => {
             const { price } = req.body;
             const amount = parseInt(price * 100);
 
@@ -90,15 +90,8 @@ async function run() {
             })
         })
 
-        app.post('/payments', verifyToken, async (req, res) => {
+        app.post('/payments', async (req, res) => {
             const payment = req.body;
-            console.log(payment);
-            const query = { email: payment?.email };
-            const isExits = await userCollection.findOne(query);
-            if (isExits) {
-                const result = await userCollection.updateOne(query, { $set: { badge: payment?.badge } })
-                return res.send(result);
-            };
             const paymentResult = await paymentCollection.insertOne(payment);
             res.send({ paymentResult });
         })
@@ -148,6 +141,7 @@ async function run() {
 
         app.delete('/review/delete/:id', async (req, res) => {
             const id = req.params.id;
+            console.log('delete id-->', id);
             const query = { _id: new ObjectId(id) };
             const result = await mealCollection.deleteOne(query);
             res.send(result);
@@ -320,24 +314,23 @@ async function run() {
             res.send(result);
         })
 
+        app.get('/upcoming-meals', async (req, res) => {
+            const result = await mealCollection.find().toArray();
+            res.send(result);
+        })
+
         app.get('/upcoming/meals', async (req, res) => {
-            try {
-                const currentDate = new Date();
-                const sortOptions = { likes: -1 }; // Sort by likes in descending order
+            const sortOptions = { likes: -1 }; // Sort by likes in descending order
 
-                const result = await mealCollection.find({
-                    date: { $gte: currentDate }
-                }).sort(sortOptions).toArray();
+            const result = await mealCollection.find().sort(sortOptions).toArray();
 
-                res.send(result);
-            } catch (error) {
-                res.status(500).send({ error: 'An error occurred while fetching meals' });
-            }
-        });
+            res.send(result);
+        })
 
         // users api
         app.post('/user', async (req, res) => {
             const user = req.body;
+            console.log(user);
             const query = { email: user?.email };
             const existingUser = await userCollection.findOne(query);
             if (existingUser) {
