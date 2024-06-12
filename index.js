@@ -90,7 +90,7 @@ async function run() {
             })
         })
 
-        app.post('/payments', async (req, res) => {
+        app.post('/payments', verifyToken, async (req, res) => {
             const payment = req.body;
             console.log(payment);
             const query = { email: payment?.email };
@@ -105,7 +105,8 @@ async function run() {
 
         app.get('/payments/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
-            const result = await paymentCollection.find().toArray();
+            const query = { email }
+            const result = await paymentCollection.find(query).toArray();
             res.send(result);
         })
 
@@ -117,7 +118,7 @@ async function run() {
             res.send(result);
         })
 
-        app.post('/meals/:id/reviews', async (req, res) => {
+        app.post('/meals/:id/reviews', verifyToken, async (req, res) => {
             const mealId = req.params.id;
             const newReview = req.body;
             const query = { _id: new ObjectId(mealId) };
@@ -157,8 +158,21 @@ async function run() {
             const limit = parseInt(req.query.size);
             const skip = page * limit;
 
+            const sort = req.query.sort;
+
+            let sortOptions = {};
+            if (sort === 'likes_asc') {
+                sortOptions = { likes: 1 };
+            } else if (sort === 'likes_desc') {
+                sortOptions = { likes: -1 };
+            } else if (sort === 'reviews_asc') {
+                sortOptions = { reviews: 1 };
+            } else if (sort === 'reviews_desc') {
+                sortOptions = { reviews: -1 };
+            }
+
             try {
-                const items = await mealCollection.find().skip(skip).limit(limit).toArray();
+                const items = await mealCollection.find().sort(sortOptions).skip(skip).limit(limit).toArray();
                 const totalMeals = await mealCollection.countDocuments();
 
                 res.send({
@@ -240,12 +254,29 @@ async function run() {
             res.send(result);
         })
 
+        app.get('/request/:email', async (req, res) => {
+            const page = parseInt(req.query.page) - 1;
+            const limit = parseInt(req.query.size);
+            const skip = page * limit;
+            const email = req.params.email;
+            const query = { userEmail: email };
+            const meals = await requestedMealCollection.find(query).skip(skip).limit(limit).toArray();
+            const totalMeals = await requestedMealCollection.countDocuments();
+
+            res.send({
+                meals,
+                totalMeals,
+                currentPage: page,
+                totalPages: Math.ceil(totalMeals / limit),
+                nextPage: page * limit < totalMeals ? page + 1 : null
+            });
+        })
+
         app.get('/request-meals', async (req, res) => {
             const page = parseInt(req.query.page) - 1;
             const limit = parseInt(req.query.size);
             const skip = page * limit;
             const search = req.query.search;
-            console.log("name--->", search);
 
             let query = {
                 $or: [
@@ -289,6 +320,21 @@ async function run() {
             res.send(result);
         })
 
+        app.get('/upcoming/meals', async (req, res) => {
+            try {
+                const currentDate = new Date();
+                const sortOptions = { likes: -1 }; // Sort by likes in descending order
+
+                const result = await mealCollection.find({
+                    date: { $gte: currentDate }
+                }).sort(sortOptions).toArray();
+
+                res.send(result);
+            } catch (error) {
+                res.status(500).send({ error: 'An error occurred while fetching meals' });
+            }
+        });
+
         // users api
         app.post('/user', async (req, res) => {
             const user = req.body;
@@ -302,9 +348,34 @@ async function run() {
         })
 
         app.get('/users', async (req, res) => {
-            const result = await userCollection.find().toArray();
-            res.send(result);
-        })
+            const page = parseInt(req.query.page) - 1;
+            const limit = parseInt(req.query.size);
+            const skip = page * limit;
+            const search = req.query.search;
+
+            let query = {
+                $or: [
+                    { name: { $regex: search, $options: 'i' } },
+                    { email: { $regex: search, $options: 'i' } },
+                ]
+            };
+
+            try {
+                const items = await userCollection.find(query).skip(skip).limit(limit).toArray();
+                const totalMeals = await userCollection.countDocuments();
+
+                res.send({
+                    items,
+                    totalMeals,
+                    currentPage: page,
+                    totalPages: Math.ceil(totalMeals / limit),
+                    nextPage: page * limit < totalMeals ? page + 1 : null
+                });
+            } catch (error) {
+                res.status(500).send({ error: 'Failed to fetch meals...' });
+            }
+        });
+
 
         // Update a user badge
         app.patch('/user-badge/update/:email', verifyToken, async (req, res) => {
