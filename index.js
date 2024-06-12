@@ -9,7 +9,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const port = process.env.PORT || 9000;
 
 const corsOptions = {
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: ['http://localhost:5173', 'http://localhost:5174', "https://hostel-server-omega.vercel.app", "https://hostel-management-d32e5.web.app"],
     credentials: true,
     optionSuccessStatus: 200,
 }
@@ -412,6 +412,7 @@ async function run() {
 
         app.get('/checkout/:package_name', async (req, res) => {
             const package = req.params.package_name;
+            console.log(package);
             const query = { package_name: package };
             const result = await packageCollection.findOne(query);
             res.send(result);
