@@ -145,6 +145,12 @@ async function run() {
             res.send(userReviews);
         });
 
+        app.delete('/review/delete/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await mealCollection.deleteOne(query);
+            res.send(result);
+        })
 
         app.get('/meals', async (req, res) => {
             const page = parseInt(req.query.page) - 1;
@@ -183,9 +189,6 @@ async function run() {
 
             let options = {};
             if (sort) options = { sort: { price: sort === 'asc' ? 1 : -1 } };
-            // if (sort) {
-            //     options.sort = { price: sort === 'asc' ? 1 : -1 };
-            // }
             const result = await mealCollection.find(query, options).toArray();
 
             res.send(result,);
@@ -195,6 +198,13 @@ async function run() {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const result = await mealCollection.findOne(query);
+            res.send(result);
+        })
+
+        app.delete('/meal/delete/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await mealCollection.deleteOne(query);
             res.send(result);
         })
 
@@ -230,9 +240,46 @@ async function run() {
             res.send(result);
         })
 
-        app.get('/requestMeals', async (req, res) => {
-            const result = await requestedMealCollection.find().toArray();
-            res.send(result);
+        app.get('/request-meals', async (req, res) => {
+            const page = parseInt(req.query.page) - 1;
+            const limit = parseInt(req.query.size);
+            const skip = page * limit;
+            const search = req.query.search;
+            console.log("name--->", search);
+
+            let query = {
+                $or: [
+                    { category: { $regex: search, $options: 'i' } },
+                    { title: { $regex: search, $options: 'i' } },
+                ]
+            };
+
+            try {
+                const items = await requestedMealCollection.find(query).skip(skip).limit(limit).toArray();
+                const totalMeals = await requestedMealCollection.countDocuments();
+
+                res.send({
+                    items,
+                    totalMeals,
+                    currentPage: page,
+                    totalPages: Math.ceil(totalMeals / limit),
+                    nextPage: page * limit < totalMeals ? page + 1 : null
+                });
+            } catch (error) {
+                res.status(500).send({ error: 'Failed to fetch meals...' });
+            }
+        });
+
+        app.patch('/meal/delivered/:id', verifyToken, async (req, res) => {
+            const id = req.params.id;
+            const meal = req.body;
+            console.log(meal);
+            const query = { _id: new ObjectId(id) };
+            const updateDoc = {
+                $set: { ...meal },
+            }
+            const result = await requestedMealCollection.updateOne(query, updateDoc)
+            res.send(result)
         })
 
         app.delete('/request-meal/:id', async (req, res) => {
